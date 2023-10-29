@@ -162,7 +162,11 @@ func (p *parser) bindBomb() {
 			isTicking := true
 			ownerProp := bombEntity.PropertyValueMust("m_hOwnerEntity")
 			planter := p.gameState.Participants().FindByPawnHandle(ownerProp.Handle())
-			planter.IsPlanting = false
+
+			// CSGOLENS: Early CS2 support hack
+			if planter != nil {
+				planter.IsPlanting = false
+			}
 
 			siteNumber := bombEntity.PropertyValueMust("m_nBombSite").Int()
 			site := events.BomsiteUnknown
