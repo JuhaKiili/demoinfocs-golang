@@ -640,6 +640,13 @@ func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEvent
 	if !geh.parser.isSource2() {
 		geh.parser.setRawPlayer(int(data["index"].GetValByte()), pl)
 	}
+
+	uid := int(data["userid"].GetValShort())
+	plr := geh.playerByUserID(uid)
+	if (plr != nil) {
+		fmt.Println("PlayerConnect event received", pl)
+		plr.IsConnected = true
+	}
 }
 
 func (geh gameEventHandler) playerDisconnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
@@ -657,7 +664,7 @@ func (geh gameEventHandler) playerDisconnect(data map[string]*msg.CSVCMsg_GameEv
 		geh.dispatch(events.PlayerDisconnected{
 			Player: pl,
 		})
-
+		fmt.Println("playerDisconnect event received", pl)
 		geh.playerByUserID(uid).IsConnected = false
 	}
 }
