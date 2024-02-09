@@ -514,12 +514,42 @@ func (p *parser) getOrCreatePlayerFromControllerEntity(controllerEntity st.Entit
 func (p *parser) bindNewPlayerControllerS2(controllerEntity st.Entity) {
 	pl := p.getOrCreatePlayerFromControllerEntity(controllerEntity)
 
+	controllerEntity.Property("m_iConnected").OnUpdate(func(val st.PropertyValue) {
+		state := val.S2UInt32()
+		wasConnected := pl.IsConnected
+		pl.IsConnected = state == 0
+
+		isDisconnection := state == 8
+		if isDisconnection {
+			for k, v := range p.rawPlayers {
+				if v.XUID == pl.SteamID64 {
+					delete(p.rawPlayers, k)
+				}
+			}
+			p.gameEventHandler.dispatch(events.PlayerDisconnected{
+				Player: pl,
+			})
+
+			return
+		}
+
+		isConnection := !wasConnected && pl.IsConnected
+		if isConnection {
+			if pl.SteamID64 != 0 {
+				p.eventDispatcher.Dispatch(events.PlayerConnect{Player: pl})
+			} else {
+				p.eventDispatcher.Dispatch(events.BotConnect{Player: pl})
+			}
+		}
+	})
+
 	controllerEntity.Property("m_iTeamNum").OnUpdate(func(val st.PropertyValue) {
 		pl.Team = common.Team(val.S2UInt64())
 		pl.TeamState = p.gameState.Team(pl.Team)
 	})
 
 	controllerEntity.OnDestroy(func() {
+		pl.IsConnected = false
 		delete(p.gameState.playersByEntityID, controllerEntity.ID())
 	})
 }
@@ -550,15 +580,6 @@ func (p *parser) bindNewPlayerPawnS2(pawnEntity st.Entity) {
 		pl := p.getOrCreatePlayerFromControllerEntity(controllerEntity)
 
 		p.bindPlayerWeaponsS2(pawnEntity, pl)
-
-		if !pl.IsConnected {
-			pl.IsConnected = true
-			if pl.SteamID64 != 0 {
-				p.eventDispatcher.Dispatch(events.PlayerConnect{Player: pl})
-			} else {
-				p.eventDispatcher.Dispatch(events.BotConnect{Player: pl})
-			}
-		}
 	})
 
 	// Position
@@ -625,14 +646,6 @@ func (p *parser) bindNewPlayerPawnS2(pawnEntity st.Entity) {
 		spottedByMaskProp.OnUpdate(spottersChanged)
 		pawnEntity.Property("m_bSpottedByMask.0001").OnUpdate(spottersChanged)
 	}
-
-	pawnEntity.OnDestroy(func() {
-		pl := getPlayerFromPawnEntity(pawnEntity)
-		if pl == nil {
-			return
-		}
-		pl.IsConnected = false
-	})
 }
 
 const maxWeapons = 64
@@ -1015,20 +1028,18 @@ func (p *parser) bindWeaponS2(entity st.Entity) {
 	// - The player is inside the buy zone
 	// - The player's money has increased AND the weapon entity is destroyed at the same tick (unfortunately the money is updated first)
 	var (
-		owner               *common.Player
 		oldOwnerMoney       int
 		lastMoneyUpdateTick int
 		lastMoneyIncreased  bool
 	)
 
 	entity.Property("m_hOwnerEntity").OnUpdate(func(val st.PropertyValue) {
-		weaponOwner := p.GameState().Participants().FindByPawnHandle(val.Handle())
-		if weaponOwner == nil {
+		owner := p.GameState().Participants().FindByPawnHandle(val.Handle())
+		if owner == nil {
 			equipment.Owner = nil
 			return
 		}
 
-		owner = weaponOwner
 		oldOwnerMoney = owner.Money()
 
 		owner.Entity.Property("m_pInGameMoneyServices.m_iAccount").OnUpdate(func(val st.PropertyValue) {
@@ -1040,6 +1051,7 @@ func (p *parser) bindWeaponS2(entity st.Entity) {
 	})
 
 	entity.OnDestroy(func() {
+		owner := p.GameState().Participants().FindByPawnHandle(entity.PropertyValueMust("m_hOwnerEntity").Handle())
 		if owner != nil && owner.IsInBuyZone() && p.GameState().IngameTick() == lastMoneyUpdateTick && lastMoneyIncreased {
 			p.eventDispatcher.Dispatch(events.ItemRefund{
 				Player: owner,

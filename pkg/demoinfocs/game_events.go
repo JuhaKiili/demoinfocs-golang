@@ -6,6 +6,7 @@ import (
 	"github.com/golang/geo/r3"
 	"github.com/markus-wa/go-unassert"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 
 	common "github.com/markus-wa/demoinfocs-golang/v4/pkg/demoinfocs/common"
 	events "github.com/markus-wa/demoinfocs-golang/v4/pkg/demoinfocs/events"
@@ -79,6 +80,24 @@ func (p *parser) handleGameEvent(ge *msg.CSVCMsg_GameEvent) {
 }
 
 func (p *parser) handleGameEventS2(ge *msgs2.CMsgSource1LegacyGameEvent) {
+	if p.gameEventDescs == nil {
+		p.eventDispatcher.Dispatch(events.ParserWarn{
+			Message: "received GameEvent but event descriptors are missing",
+			Type:    events.WarnTypeGameEventBeforeDescriptors,
+		})
+
+		list := new(msgs2.CMsgSource1LegacyGameEventList)
+
+		err := proto.Unmarshal(p.source2FallbackGameEventListBin, list)
+		if err != nil {
+			p.setError(err)
+
+			return
+		}
+
+		p.handleGameEventListS2(list)
+	}
+
 	keys := make([]*msg.CSVCMsg_GameEventKeyT, 0, len(ge.Keys))
 
 	for _, k := range ge.Keys {
@@ -620,6 +639,10 @@ func (geh gameEventHandler) HostageRescuedAll(map[string]*msg.CSVCMsg_GameEventK
 }
 
 func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
+	if geh.parser.isSource2() {
+		return
+	}
+
 	pl := common.PlayerInfo{
 		UserID:       int(data["userid"].GetValShort()),
 		Name:         data["name"].GetValString(),
@@ -650,6 +673,10 @@ func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEvent
 }
 
 func (geh gameEventHandler) playerDisconnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
+	if geh.parser.isSource2() {
+		return
+	}
+
 	uid := int(data["userid"].GetValShort())
 
 	for k, v := range geh.parser.rawPlayers {
@@ -675,6 +702,14 @@ func (geh gameEventHandler) playerTeam(data map[string]*msg.CSVCMsg_GameEventKey
 
 	if player != nil {
 		if player.Team != newTeam {
+			if geh.parser.isSource2() {
+				// The "team" field may be incorrect with CS2 demos.
+				// As the prop m_iTeamNum (bound to player.Team) is updated before the game-event is fired we can force
+				// the correct team here.
+				// https://github.com/markus-wa/demoinfocs-golang/issues/494
+				newTeam = player.Team
+			}
+
 			player.Team = newTeam
 		}
 
