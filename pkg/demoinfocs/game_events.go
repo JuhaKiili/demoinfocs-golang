@@ -641,10 +641,6 @@ func (geh gameEventHandler) HostageRescuedAll(map[string]*msg.CSVCMsg_GameEventK
 }
 
 func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() {
-		return
-	}
-
 	pl := common.PlayerInfo{
 		UserID:       int(data["userid"].GetValShort()),
 		Name:         data["name"].GetValString(),
@@ -653,16 +649,24 @@ func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEvent
 		IsFakePlayer: data["bot"].GetValBool(),
 	}
 
-	if pl.GUID != "" && pl.XUID == 0 {
-		var err error
-		pl.XUID, err = guidToSteamID64(pl.GUID)
-
-		if err != nil {
-			geh.parser.setError(fmt.Errorf("failed to parse player XUID: %v", err.Error()))
+	if geh.parser.isSource2() {
+		uid := int(data["userid"].GetValShort())
+		plr := geh.playerByUserID(uid)
+		if plr != nil {
+			fmt.Println("PlayerConnect event received", pl)
+			plr.IsConnected = true
 		}
-	}
+	} else {
+		if pl.GUID != "" && pl.XUID == 0 {
+			var err error
+			pl.XUID, err = guidToSteamID64(pl.GUID)
 
-	geh.parser.setRawPlayer(int(data["index"].GetValByte()), pl)
+			if err != nil {
+				geh.parser.setError(fmt.Errorf("failed to parse player XUID: %v", err.Error()))
+			}
+		}
+		geh.parser.setRawPlayer(int(data["index"].GetValByte()), pl)
+	}
 }
 
 func (geh gameEventHandler) playerDisconnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
