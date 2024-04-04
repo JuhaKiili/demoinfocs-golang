@@ -405,7 +405,13 @@ func (e *Equipment) ZoomLevel() ZoomLevel {
 		return 0
 	}
 
-	return ZoomLevel(value.Int())
+	// cs2lens fix needed when used with Awpy
+	intVal, isInt32 := value.Any.(int32)
+	if !isInt32 {
+		return 0
+	}
+
+	return ZoomLevel(intVal)
 }
 
 // AmmoReserve returns the ammo left available for reloading.
