@@ -568,7 +568,6 @@ func (p *parser) handleStringTables(msg *msgs2.CDemoStringTables) {
 				if err != nil {
 					panic(errors.Wrap(err, "failed to parse playerIndex"))
 				}
-
 				p.parseUserInfo(item.GetData(), playerIndex)
 			}
 		}
@@ -605,7 +604,13 @@ func (p *parser) handleCreateStringTableS1(tab *msg.CSVCMsg_CreateStringTable) {
 
 func (p *parser) parseUserInfo(data []byte, playerIndex int) {
 	if _, exists := p.rawPlayers[playerIndex]; exists {
-		return
+		fmt.Println("playerIndex", playerIndex, "already exists")
+		if !p.rawPlayers[playerIndex].IsFakePlayer {
+			fmt.Println("playerIndex", playerIndex, "is not a fake player. Not overriding with new data.")
+			return
+		} else {
+			fmt.Println("playerIndex", playerIndex, "is a fake player. Overriding with new data.")	
+		}
 	}
 
 	var userInfo msgs2.CMsgPlayerInfo
@@ -639,6 +644,8 @@ func (p *parser) parseUserInfo(data []byte, playerIndex int) {
 		CustomFiles3:    0,
 		FilesDownloaded: 0,
 	}
+
+	fmt.Println("PlayerInfo parsed", playerInfo)
 	p.setRawPlayer(playerIndex, playerInfo)
 
 	povDemoDetected := p.recordingPlayerSlot == -1 && p.header.ClientName == playerInfo.Name
