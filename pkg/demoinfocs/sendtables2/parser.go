@@ -60,6 +60,7 @@ type Parser struct {
 	entityFullPackets int
 	entities          map[int32]*Entity
 	entityHandlers    []st.EntityHandler
+	isPovDemo				  bool
 }
 
 func (p *Parser) ReadEnterPVS(r *bit.BitReader, index int, entities map[int]st.Entity, slot int) st.Entity {
@@ -224,4 +225,8 @@ func (p *Parser) ParsePacket(b []byte) error {
 	}
 
 	return nil
+}
+
+func (p *Parser) OnPovDemo() {
+	p.isPovDemo = true
 }

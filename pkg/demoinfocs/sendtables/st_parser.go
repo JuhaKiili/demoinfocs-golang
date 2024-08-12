@@ -409,6 +409,10 @@ func (p *SendTableParser) classBits() int {
 	return int(math.Ceil(math.Log2(float64(len(p.serverClasses)))))
 }
 
+func (p *SendTableParser) OnPovDemo() {
+	// noop
+}
+
 // NewSendTableParser returns a new SendTableParser.
 //
 // Intended for internal use only.

@@ -428,6 +428,10 @@ func (e *Entity) readFields(r *reader, paths *[]*fieldPath) {
 
 	for _, fp := range *paths {
 		f := e.class.serializer.getFieldForFieldPath(fp, 0)
+		if f == nil {
+			fp.release()
+			continue
+		}
 		name := e.class.getNameForFieldPath(fp)
 		decoder, base := e.class.serializer.getDecoderForFieldPath2(fp, 0)
 
@@ -462,7 +466,7 @@ func (e *Entity) readFields(r *reader, paths *[]*fieldPath) {
 				S2:        true,
 			})
 		}
-
+		
 		fp.release()
 	}
 }
@@ -520,7 +524,11 @@ func (p *Parser) OnPacketEntities(m *msgs2.CSVCMsg_PacketEntities) error {
 
 				class := p.classesById[classID]
 				if class == nil {
-					_panicf("unable to find new class %d", classID)
+					if p.isPovDemo {
+						continue
+					} else {
+						_panicf("unable to find new class %d", classID)
+					}
 				}
 
 				e = newEntity(index, serial, class)
@@ -550,7 +558,11 @@ func (p *Parser) OnPacketEntities(m *msgs2.CSVCMsg_PacketEntities) error {
 				op = st.EntityOpCreated | st.EntityOpEntered
 			} else {
 				if e = p.entities[index]; e == nil {
-					_panicf("unable to find existing entity %d", index)
+					if p.isPovDemo {
+						continue
+					} else {
+						_panicf("unable to find existing entity %d", index)
+					}
 				}
 
 				op = st.EntityOpUpdated

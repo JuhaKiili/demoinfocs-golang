@@ -652,5 +652,6 @@ func (p *parser) parseUserInfo(data []byte, playerIndex int) {
 	if povDemoDetected {
 		p.recordingPlayerSlot = playerIndex
 		p.eventDispatcher.Dispatch(events.POVRecordingPlayerDetected{PlayerSlot: playerIndex, PlayerInfo: playerInfo})
+		p.stParser.OnPovDemo()
 	}
 }

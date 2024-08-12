@@ -32,6 +32,7 @@ type sendTableParser interface {
 	OnServerInfo(m *msgs2.CSVCMsg_ServerInfo) error
 	OnPacketEntities(m *msgs2.CSVCMsg_PacketEntities) error
 	OnEntity(h st.EntityHandler)
+	OnPovDemo()
 }
 
 type createStringTable struct {

@@ -61,7 +61,12 @@ func (s *serializer) getDecoderForFieldPath2(fp *fieldPath, pos int) (fieldDecod
 }
 
 func (s *serializer) getFieldForFieldPath(fp *fieldPath, pos int) *field {
-	return s.fields[fp.path[pos]].getFieldForFieldPath(fp, pos+1)
+	// Check for out of bounds
+	if len(s.fields) > fp.path[pos] {
+		return s.fields[fp.path[pos]].getFieldForFieldPath(fp, pos+1)
+	} else {
+		return nil
+	}
 }
 
 func (s *serializer) getFieldPathForName(fp *fieldPath, name string) bool {
