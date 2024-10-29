@@ -154,6 +154,10 @@ func (geh gameEventHandler) playerByUserID(userID int) *common.Player {
 }
 
 func (geh gameEventHandler) playerByUserID32(userID int32) *common.Player {
+	if geh.parser.isSource2() && userID <= math.MaxUint16 {
+		userID &= 0xff
+	}
+
 	return geh.playerByUserID(int(userID))
 }
 
@@ -204,6 +208,7 @@ func newGameEventHandler(parser *parser, ignoreBombsiteIndexNotFound bool) gameE
 		"bomb_pickup":                     delayIfNoPlayers(geh.bombPickup),      // Bomb picked up
 		"bomb_planted":                    delayIfNoPlayers(geh.bombPlanted),     // Plant finished
 		"bot_takeover":                    delay(geh.botTakeover),                // Bot got taken over
+		"bullet_damage":                   delayIfNoPlayers(geh.bulletDamage),    // CS2 only
 		"buytime_ended":                   nil,                                   // Not actually end of buy time, seems to only be sent once per game at the start
 		"choppers_incoming_warning":       nil,                                   // Helicopters are coming (Danger zone mode)
 		"cs_intermission":                 nil,                                   // Dunno, only in locally recorded (POV) demo
@@ -649,6 +654,22 @@ func (geh gameEventHandler) HostageRescuedAll(map[string]*msg.CSVCMsg_GameEventK
 	geh.dispatch(events.HostageRescuedAll{})
 }
 
+func (geh gameEventHandler) bulletDamage(data map[string]*msg.CSVCMsg_GameEventKeyT) {
+	event := events.BulletDamage{
+		Attacker:        geh.playerByUserID32(data["attacker"].GetValShort()),
+		Victim:          geh.playerByUserID32(data["victim"].GetValShort()),
+		Distance:        data["distance"].GetValFloat(),
+		DamageDirX:      data["damage_dir_x"].GetValFloat(),
+		DamageDirY:      data["damage_dir_y"].GetValFloat(),
+		DamageDirZ:      data["damage_dir_z"].GetValFloat(),
+		NumPenetrations: int(data["num_penetrations"].GetValShort()),
+		IsNoScope:       data["no_scope"].GetValBool(),
+		IsAttackerInAir: data["in_air"].GetValBool(),
+	}
+
+	geh.dispatch(event)
+}
+
 func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
 	pl := common.PlayerInfo{
 		UserID:       int(data["userid"].GetValShort()),
@@ -682,6 +703,10 @@ func (geh gameEventHandler) playerConnect(data map[string]*msg.CSVCMsg_GameEvent
 
 func (geh gameEventHandler) playerDisconnect(data map[string]*msg.CSVCMsg_GameEventKeyT) {
 	uid := int(data["userid"].GetValShort())
+	if geh.parser.isSource2() && uid <= math.MaxUint16 {
+		uid &= 0xff
+	}
+
 	pl := geh.playerByUserID(uid)
 
 	if geh.parser.isSource2() {

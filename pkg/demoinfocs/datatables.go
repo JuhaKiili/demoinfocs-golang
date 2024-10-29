@@ -3,6 +3,7 @@ package demoinfocs
 import (
 	"fmt"
 	"math"
+	"os"
 	"strings"
 
 	"github.com/golang/geo/r3"
@@ -416,10 +417,19 @@ func (p *parser) bindPlayers() {
 
 func (p *parser) getOrCreatePlayer(entityID int, rp *common.PlayerInfo) (isNew bool, player *common.Player) {
 	player = p.gameState.playersByEntityID[entityID]
+	userID := -1
+
+	if rp != nil {
+		userID = rp.UserID
+	}
+
+	if p.isSource2() && userID <= math.MaxUint16 {
+		userID &= 0xff
+	}
 
 	if player == nil {
 		if rp != nil {
-			player = p.gameState.playersByUserID[rp.UserID]
+			player = p.gameState.playersByUserID[userID]
 
 			if player == nil {
 				isNew = true
@@ -428,7 +438,7 @@ func (p *parser) getOrCreatePlayer(entityID int, rp *common.PlayerInfo) (isNew b
 				player.Name = rp.Name
 				player.SteamID64 = rp.XUID
 				player.IsBot = rp.IsFakePlayer || rp.GUID == "BOT"
-				player.UserID = rp.UserID
+				player.UserID = userID
 
 				p.gameState.indexPlayerBySteamID(player)
 			}
@@ -446,7 +456,7 @@ func (p *parser) getOrCreatePlayer(entityID int, rp *common.PlayerInfo) (isNew b
 	p.gameState.playersByEntityID[entityID] = player
 
 	if rp != nil {
-		p.gameState.playersByUserID[rp.UserID] = player
+		p.gameState.playersByUserID[userID] = player
 	}
 
 	return isNew, player
@@ -554,6 +564,7 @@ func (p *parser) bindNewPlayerControllerS2(controllerEntity st.Entity) {
 	pl := p.getOrCreatePlayerFromControllerEntity(controllerEntity)
 
 	controllerEntity.Property("m_iConnected").OnUpdate(func(val st.PropertyValue) {
+		pl := p.getOrCreatePlayerFromControllerEntity(controllerEntity)
 		state := val.S2UInt32()
 		wasConnected := pl.IsConnected
 		pl.IsConnected = state == 0
@@ -627,6 +638,7 @@ func (p *parser) bindNewPlayerPawnS2(pawnEntity st.Entity) {
 		if pl == nil {
 			return
 		}
+
 		if pl.IsAlive() {
 			pl.LastAlivePosition = pos
 		}
@@ -909,7 +921,7 @@ func (p *parser) bindGrenadeProjectiles(entity st.Entity) {
 				if exists {
 					wep = weaponType
 				} else {
-					fmt.Printf("unknown grenade model %d\n", model)
+					fmt.Fprintf(os.Stderr, "unknown grenade model %d\n", model)
 				}
 			}
 		}
@@ -1072,7 +1084,7 @@ func (p *parser) bindWeaponS2(entity st.Entity) {
 	wepType := common.EquipmentIndexMapping[itemIndex]
 
 	if wepType == common.EqUnknown {
-		fmt.Println("unknown equipment with index", itemIndex)
+		fmt.Fprintln(os.Stderr, "unknown equipment with index", itemIndex)
 
 		p.msgDispatcher.Dispatch(events.ParserWarn{
 			Message: fmt.Sprintf("unknown equipment with index %d", itemIndex),
