@@ -68,6 +68,7 @@ type Parser struct {
 	pathCache                   []*fieldPath
 	tuplesCache                 []tuple
 	packetEntitiesPanicWarnFunc func(error)
+	isPovDemo                   bool
 }
 
 func (p *Parser) ReadEnterPVS(r *bit.BitReader, index int, entities map[int]st.Entity, slot int) st.Entity {
