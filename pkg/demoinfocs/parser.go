@@ -372,6 +372,7 @@ type ParserConfig struct {
 // DefaultParserConfig is the default Parser configuration used by NewParser().
 var DefaultParserConfig = ParserConfig{
 	MsgQueueBufferSize: -1,
+	IgnorePacketEntitiesPanic: true, // Avoid POV demo panics in cs2lens
 }
 
 //go:embed s2_CMsgSource1LegacyGameEventList.pb.bin
