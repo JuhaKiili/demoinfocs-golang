@@ -431,10 +431,6 @@ func (e *Entity) readFields(r *reader, paths *[]*fieldPath) {
 
 	for _, fp := range (*paths)[:n] {
 		f := e.class.serializer.getFieldForFieldPath(fp, 0)
-		if f == nil {
-			fp.release()
-			continue
-		}
 		name := e.class.getNameForFieldPath(fp)
 		decoder, base := e.class.serializer.getDecoderForFieldPath2(fp, 0)
 
