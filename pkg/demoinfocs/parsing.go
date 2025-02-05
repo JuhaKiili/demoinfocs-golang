@@ -332,6 +332,7 @@ var demoCommandMsgsCreators = map[msgs2.EDemoCommands]NetMessageCreator{
 	msgs2.EDemoCommands_DEM_SpawnGroups:     func() proto.Message { return &msgs2.CDemoSpawnGroups{} },
 	msgs2.EDemoCommands_DEM_AnimationData:   func() proto.Message { return &msgs2.CDemoAnimationData{} },
 	msgs2.EDemoCommands_DEM_AnimationHeader: func() proto.Message { return &msgs2.CDemoAnimationHeader{} },
+	msgs2.EDemoCommands_DEM_Recovery:        func() proto.Message { return &msgs2.CDemoRecovery{} },
 }
 
 func (p *parser) parseFrameS2() bool {
@@ -393,26 +394,15 @@ func (p *parser) parseFrameS2() bool {
 	p.msgQueue <- msg
 
 	switch m := msg.(type) {
-	case *msgs2.CDemoFileHeader:
-		p.handleDemoFileHeader(m)
-
 	case *msgs2.CDemoPacket:
 		p.handleDemoPacket(m)
 
 	case *msgs2.CDemoFullPacket:
-		p.handleFullPacket(m)
+		p.msgQueue <- m.StringTable
 
-	case *msgs2.CDemoSendTables:
-		p.handleSendTables(m)
-
-	case *msgs2.CDemoClassInfo:
-		p.handleClassInfo(m)
-
-	case *msgs2.CDemoStringTables:
-		p.handleStringTables(m)
-
-	case *msgs2.CDemoFileInfo:
-		p.handleFileInfo(m)
+		if m.Packet.GetData() != nil {
+			p.handleDemoPacket(m.Packet)
+		}
 	}
 
 	// Queue up some post processing

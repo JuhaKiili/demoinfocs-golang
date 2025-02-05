@@ -375,9 +375,6 @@ var DefaultParserConfig = ParserConfig{
 	IgnorePacketEntitiesPanic: true, // Avoid POV demo panics in cs2lens
 }
 
-//go:embed s2_CMsgSource1LegacyGameEventList.pb.bin
-var defaultSource2FallbackGameEventListBin []byte
-
 // NewParserWithConfig returns a new Parser with a custom configuration.
 //
 // See also: NewParser() & ParserConfig
@@ -401,11 +398,6 @@ func NewParserWithConfig(demostream io.Reader, config ParserConfig) Parser {
 	p.recordingPlayerSlot = -1
 	p.disableMimicSource1GameEvents = config.DisableMimicSource1Events
 	p.source2FallbackGameEventListBin = config.Source2FallbackGameEventListBin
-
-	if p.source2FallbackGameEventListBin == nil {
-		p.source2FallbackGameEventListBin = defaultSource2FallbackGameEventListBin
-	}
-
 	p.ignorePacketEntitiesPanic = config.IgnorePacketEntitiesPanic
 
 	dispatcherCfg := dp.Config{
@@ -424,7 +416,6 @@ func NewParserWithConfig(demostream io.Reader, config ParserConfig) Parser {
 	p.msgDispatcher.RegisterHandler(p.handleUpdateStringTableS1)
 	p.msgDispatcher.RegisterHandler(p.handleUserMessage)
 	p.msgDispatcher.RegisterHandler(p.handleSetConVar)
-	p.msgDispatcher.RegisterHandler(p.handleFrameParsed)
 	p.msgDispatcher.RegisterHandler(p.handleServerInfo)
 	p.msgDispatcher.RegisterHandler(p.handleEncryptedData)
 	p.msgDispatcher.RegisterHandler(p.gameState.handleIngameTickNumber)
@@ -439,6 +430,12 @@ func NewParserWithConfig(demostream io.Reader, config ParserConfig) Parser {
 	p.msgDispatcher.RegisterHandler(p.handleServerRankUpdate)
 	p.msgDispatcher.RegisterHandler(p.handleMessageSayText)
 	p.msgDispatcher.RegisterHandler(p.handleMessageSayText2)
+	p.msgDispatcher.RegisterHandler(p.handleSendTables)
+	p.msgDispatcher.RegisterHandler(p.handleFileInfo)
+	p.msgDispatcher.RegisterHandler(p.handleDemoFileHeader)
+	p.msgDispatcher.RegisterHandler(p.handleClassInfo)
+	p.msgDispatcher.RegisterHandler(p.handleStringTables)
+	p.msgDispatcher.RegisterHandler(p.handleFrameParsed)
 
 	if config.MsgQueueBufferSize >= 0 {
 		p.initMsgQueue(config.MsgQueueBufferSize)
