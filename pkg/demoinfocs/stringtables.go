@@ -602,21 +602,14 @@ func (p *parser) handleCreateStringTableS1(tab *msg.CSVCMsg_CreateStringTable) {
 
 func (p *parser) parseUserInfo(data []byte, playerIndex int) {
 	if _, exists := p.rawPlayers[playerIndex]; exists {
-		return
+		fmt.Println("playerIndex", playerIndex, "already exists")
+		if !p.rawPlayers[playerIndex].IsFakePlayer {
+			fmt.Println("playerIndex", playerIndex, "is not a fake player. Not overriding with new data.")
+			return
+		} else {
+			fmt.Println("playerIndex", playerIndex, "is a fake player. Overriding with new data.")	
+		}
 	}
-
-	// This used to help with POV demos.
-	// Commenting out on 2025-02-26 due to it causing issues.
-
-	// if _, exists := p.rawPlayers[playerIndex]; exists {
-	// 	fmt.Println("playerIndex", playerIndex, "already exists")
-	// 	if !p.rawPlayers[playerIndex].IsFakePlayer {
-	// 		fmt.Println("playerIndex", playerIndex, "is not a fake player. Not overriding with new data.")
-	// 		return
-	// 	} else {
-	// 		fmt.Println("playerIndex", playerIndex, "is a fake player. Overriding with new data.")	
-	// 	}
-	// }
 
 	var userInfo msgs2.CMsgPlayerInfo
 	err := proto.Unmarshal(data, &userInfo)
