@@ -344,6 +344,9 @@ func (p *parser) handleDemoPacket(pack *msgs2.CDemoPacket) {
 		}
 
 		if msgCreator == nil {
+			if m.t == 19 { // HOTFIX for the POV demo issue caused by CS2 update on 2025-07-30
+				return
+			}
 			panic(fmt.Errorf("unknown message type %d", m.t))
 		}
 
