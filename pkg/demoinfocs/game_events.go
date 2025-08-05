@@ -1114,7 +1114,9 @@ func getPlayerWeapon(player *common.Player, wepType common.EquipmentType) *commo
 func mapGameEventData(d *msg.CSVCMsg_GameEventListDescriptorT, e *msg.CSVCMsg_GameEvent) map[string]*msg.CSVCMsg_GameEventKeyT {
 	data := make(map[string]*msg.CSVCMsg_GameEventKeyT, len(d.Keys))
 	for i, k := range d.Keys {
-		data[k.GetName()] = e.Keys[i]
+		if i < len(e.Keys) { // cs2lens hotfix range check for POV demos after 2025-07-29 CS2 update
+			data[k.GetName()] = e.Keys[i]
+		}
 	}
 
 	return data
