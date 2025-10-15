@@ -465,6 +465,18 @@ func (p *parser) bindNewPlayerPawn(pawnEntity st.Entity) {
 		p.bindPlayerWeapons(pawnEntity, pl)
 	})
 
+	// CS2Lens: This was removed from v5, but awpy still needs it so bringing it back
+	pawnEntity.OnPositionUpdate(func(pos r3.Vector) {
+		pl := getPlayerFromPawnEntity(pawnEntity)
+		if pl == nil {
+			return
+		}
+
+		if pl.IsAlive() {
+			pl.LastAlivePosition = pos
+		}
+	})
+
 	pawnEntity.Property("m_flFlashDuration").OnUpdate(func(val st.PropertyValue) {
 		pl := getPlayerFromPawnEntity(pawnEntity)
 		if pl == nil {
