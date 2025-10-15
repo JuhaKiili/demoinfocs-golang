@@ -750,15 +750,16 @@ func (p *parser) bindGrenadeProjectiles(entity st.Entity) {
 		proj.Owner = p.gameState.Participants().FindByPawnHandle(val.Handle())
 	})
 
-	entity.OnPositionUpdate(func(newPos r3.Vector) {
-		proj.Trajectory = append(proj.Trajectory, newPos)
+	// cs2lens: This was once needed, see commit 8cc09454411ab58cbe75a7fa4c5b938d7e290e1e
+	// entity.OnPositionUpdate(func(newPos r3.Vector) {
+	// 	proj.Trajectory = append(proj.Trajectory, newPos)
 
-		proj.Trajectory2 = append(proj.Trajectory2, common.TrajectoryEntry{
-			Position: newPos,
-			FrameID:  p.CurrentFrame(),
-			Time:     p.CurrentTime(),
-		})
-	})
+	// 	proj.Trajectory2 = append(proj.Trajectory2, common.TrajectoryEntry{
+	// 		Position: newPos,
+	// 		FrameID:  p.CurrentFrame(),
+	// 		Time:     p.CurrentTime(),
+	// 	})
+	// })
 
 	// Some demos don't have this property as it seems
 	// So we need to check for nil and can't send out bounce events if it's missing

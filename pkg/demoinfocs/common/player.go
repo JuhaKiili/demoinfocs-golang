@@ -194,7 +194,10 @@ func (p *Player) FlashbangCount() uint64 {
 // This is NOT "Line of Sight" / FOV - look up "CSGO TraceRay" for that.
 // May not behave as expected with multiple spotters.
 func (p *Player) IsSpottedBy(other *Player) bool {
-	if p.Entity == nil || p.demoInfoProvider.IsSource2() && p.PlayerPawnEntity() == nil {
+	
+	// cs2lens: this was once needed, see commit 92605dd9ca901829d63f2960faf7fd1dbabe3dcc
+	// if p.Entity == nil || p.demoInfoProvider.IsSource2() && p.PlayerPawnEntity() == nil {
+	if p.Entity == nil {
 		return false
 	}
 

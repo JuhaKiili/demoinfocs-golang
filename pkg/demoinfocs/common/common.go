@@ -32,6 +32,7 @@ type GrenadeProjectile struct {
 	Thrower        *Player // Always seems to be the same as Owner, even if the grenade was picked up
 	Owner          *Player // Always seems to be the same as Thrower, even if the grenade was picked up
 
+	// cs2lens: This was renamed from Trajectory2 to Trajectory by origin
 	Trajectory []TrajectoryEntry // List of all known locations and the point in time of the grenade up to the current point
 
 	// uniqueID is used to distinguish different grenades (which potentially have the same, reused entityID) from each other.
