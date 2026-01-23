@@ -530,6 +530,24 @@ func (p *parser) bindNewPlayerPawn(pawnEntity st.Entity) {
 		spottedByMaskProp.OnUpdate(spottersChanged)
 		pawnEntity.Property("m_bSpottedByMask.0001").OnUpdate(spottersChanged)
 	}
+
+	buttonDownMaskProp := pawnEntity.Property("m_pMovementServices.m_nButtonDownMaskPrev")
+	if buttonDownMaskProp != nil {
+		buttonDownMaskProp.OnUpdate(func(val st.PropertyValue) {
+			pl := getPlayerFromPawnEntity(pawnEntity)
+			if pl == nil {
+				return
+			}
+
+			state := val.UInt64()
+			pl.ButtonsPressedState = state
+
+			p.eventDispatcher.Dispatch(events.PlayerButtonsStateUpdate{
+				Player:       pl,
+				ButtonsState: state,
+			})
+		})
+	}
 }
 
 func (p *parser) bindPlayerWeapons(pawnEntity st.Entity, pl *common.Player) {
@@ -691,10 +709,12 @@ func (p *parser) bindGrenadeProjectiles(entity st.Entity) {
 
 		p.gameEventHandler.addThrownGrenade(proj.Thrower, proj.WeaponInstance)
 
-		p.gameState.flyingFlashbangs = append(p.gameState.flyingFlashbangs, &FlyingFlashbang{
-			projectile:       proj,
-			flashedEntityIDs: []int{},
-		})
+		if proj.WeaponInstance.Type == common.EqFlash {
+			p.gameState.flyingFlashbangs = append(p.gameState.flyingFlashbangs, &FlyingFlashbang{
+				projectile:       proj,
+				flashedEntityIDs: []int{},
+			})
+		}
 
 		// cs2lens: We need to do this the old way for awpy, see commit 8cc09454411ab58cbe75a7fa4c5b938d7e290e1e
 		// proj.Trajectory = append(proj.Trajectory, common.TrajectoryEntry{
