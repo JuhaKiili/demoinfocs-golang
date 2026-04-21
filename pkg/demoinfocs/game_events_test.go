@@ -148,6 +148,45 @@ func TestGetThrownGrenade_Found(t *testing.T) {
 	assert.Equal(t, wep, he)
 }
 
+// TestGetThrownGrenade_CircularControlledBot verifies that getThrownGrenade doesn't
+// infinitely recurse when ControlledBot() creates a circular reference between two players (see #620).
+func TestGetThrownGrenade_CircularControlledBot(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	provider := demoInfoProvider{parser: p}
+
+	playerA := common.NewPlayer(provider)
+	playerA.SteamID64 = 1
+	playerB := common.NewPlayer(provider)
+	playerB.SteamID64 = 2
+
+	// Add players to the game state indexed by entity ID so FindPlayerByHandle can find them.
+	p.gameState.playersByEntityID[1] = playerA
+	p.gameState.playersByEntityID[2] = playerB
+
+	// Create circular bot references: playerA.ControlledBot() returns playerB and vice versa.
+	// ControlledBot() reads "m_hOriginalControllerOfCurrentPawn" from the entity and calls
+	// FindPlayerByHandle. entityIDFromHandle(2) == 2, entityIDFromHandle(1) == 1.
+	playerA.Entity = stfake.NewEntityWithProperty("m_hOriginalControllerOfCurrentPawn", st.PropertyValue{Any: uint64(2)})
+	playerB.Entity = stfake.NewEntityWithProperty("m_hOriginalControllerOfCurrentPawn", st.PropertyValue{Any: uint64(1)})
+
+	smoke := common.NewEquipment(common.EqSmoke)
+	he := common.NewEquipment(common.EqHE)
+
+	// Should not panic or infinite loop - returns nil since no grenade was added
+	wep := p.gameEventHandler.getThrownGrenade(playerA, smoke.Type)
+	assert.Nil(t, wep)
+
+	// Should find a grenade stored for playerB when searching via playerA
+	p.gameEventHandler.addThrownGrenade(playerB, smoke)
+	wep = p.gameEventHandler.getThrownGrenade(playerA, smoke.Type)
+	assert.Equal(t, smoke, wep)
+
+	// Should also find a grenade stored for playerA when searching via playerB (different grenade type)
+	p.gameEventHandler.addThrownGrenade(playerA, he)
+	wep = p.gameEventHandler.getThrownGrenade(playerB, he.Type)
+	assert.Equal(t, he, wep)
+}
+
 func TestDeleteThrownGrenade_NilPlayer(t *testing.T) {
 	p := NewParser(rand.Reader).(*parser)
 	he := common.NewEquipment(common.EqHE)
@@ -215,6 +254,119 @@ func TestGetEquipmentInstance_Grenade_Thrown(t *testing.T) {
 	wep := p.gameEventHandler.getEquipmentInstance(pl, he.Type)
 
 	assert.Equal(t, he, wep)
+}
+
+func TestAttackerWeaponType_UnknownStaysUnknownWithoutContext(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	p.currentFrame = 24
+
+	wepType := p.gameEventHandler.attackerWeaponType(common.EqUnknown, 123)
+
+	assert.Equal(t, common.EqUnknown, wepType)
+}
+
+func TestAttackerWeaponType_FallDamageWins(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	p.currentFrame = 36
+	p.gameEventHandler.userIDToFallDamageFrame[123] = p.currentFrame
+
+	wepType := p.gameEventHandler.attackerWeaponType(common.EqUnknown, 123)
+
+	assert.Equal(t, common.EqWorld, wepType)
+}
+
+func TestAttackerWeaponType_RoundEndReasonTargetBombedWins(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	p.currentFrame = 48
+	p.gameEventHandler.frameToRoundEndReason[p.currentFrame] = events.RoundEndReasonTargetBombed
+
+	wepType := p.gameEventHandler.attackerWeaponType(common.EqUnknown, 123)
+
+	assert.Equal(t, common.EqBomb, wepType)
+}
+
+func TestPlayerHurt_UnknownWeaponDefaultsToWorld(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	p.currentFrame = 60
+
+	var got []events.PlayerHurt
+	p.RegisterEventHandler(func(e events.PlayerHurt) {
+		got = append(got, e)
+	})
+
+	p.gameEventHandler.playerHurt(playerHurtEventData(11, 65535, ""))
+	assert.Len(t, got, 0)
+
+	p.processFrameGameEvents()
+
+	assert.Len(t, got, 1)
+	assert.NotNil(t, got[0].Weapon)
+	assert.Equal(t, common.EqWorld, got[0].Weapon.Type)
+}
+
+func TestPlayerHurt_UnknownWeaponUsesBombWhenBombExplodedThisFrame(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	p.currentFrame = 72
+	p.gameEventHandler.frameToBombExploded[p.currentFrame] = true
+
+	var got []events.PlayerHurt
+	p.RegisterEventHandler(func(e events.PlayerHurt) {
+		got = append(got, e)
+	})
+
+	p.gameEventHandler.playerHurt(playerHurtEventData(12, 65535, ""))
+	assert.Len(t, got, 0)
+
+	p.processFrameGameEvents()
+
+	assert.Len(t, got, 1)
+	assert.NotNil(t, got[0].Weapon)
+	assert.Equal(t, common.EqBomb, got[0].Weapon.Type)
+}
+
+func TestPlayerHurt_KnownWeaponDispatchesImmediately(t *testing.T) {
+	p := NewParser(rand.Reader).(*parser)
+	p.currentFrame = 84
+
+	var got []events.PlayerHurt
+	p.RegisterEventHandler(func(e events.PlayerHurt) {
+		got = append(got, e)
+	})
+
+	p.gameEventHandler.playerHurt(playerHurtEventData(13, 7, "ak47"))
+
+	assert.Len(t, got, 1)
+	assert.NotNil(t, got[0].Weapon)
+	assert.Equal(t, common.EqAK47, got[0].Weapon.Type)
+}
+
+func playerHurtEventData(userID int32, attacker int32, weapon string) map[string]*msg.CMsgSource1LegacyGameEventKeyT {
+	return map[string]*msg.CMsgSource1LegacyGameEventKeyT{
+		"userid": {
+			ValShort: proto.Int32(userID),
+		},
+		"attacker": {
+			ValShort: proto.Int32(attacker),
+		},
+		"weapon": {
+			ValString: proto.String(weapon),
+		},
+		"health": {
+			ValByte: proto.Int32(92),
+		},
+		"armor": {
+			ValByte: proto.Int32(0),
+		},
+		"dmg_health": {
+			ValShort: proto.Int32(8),
+		},
+		"dmg_armor": {
+			ValByte: proto.Int32(0),
+		},
+		"hitgroup": {
+			ValByte: proto.Int32(int32(events.HitGroupGeneric)),
+		},
+	}
 }
 
 func TestGetCommunityId(t *testing.T) {

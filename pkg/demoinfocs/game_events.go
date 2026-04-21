@@ -67,6 +67,7 @@ func (p *parser) handleGameEvent(ge *msg.CMsgSource1LegacyGameEvent) {
 type gameEventHandler struct {
 	parser                      *parser
 	gameEventNameToHandler      map[string]gameEventHandlerFunc
+	frameToBombExploded         map[int]bool
 	userIDToFallDamageFrame     map[int32]int
 	frameToRoundEndReason       map[int]events.RoundEndReason
 	ignoreBombsiteIndexNotFound bool // see https://github.com/markus-wa/demoinfocs-golang/issues/314
@@ -108,6 +109,7 @@ type gameEventHandlerFunc func(map[string]*msg.CMsgSource1LegacyGameEventKeyT)
 func newGameEventHandler(parser *parser, ignoreBombsiteIndexNotFound bool) gameEventHandler {
 	geh := gameEventHandler{
 		parser:                      parser,
+		frameToBombExploded:         make(map[int]bool),
 		userIDToFallDamageFrame:     make(map[int32]int),
 		frameToRoundEndReason:       make(map[int]events.RoundEndReason),
 		ignoreBombsiteIndexNotFound: ignoreBombsiteIndexNotFound,
@@ -440,8 +442,8 @@ func (geh gameEventHandler) playerHurt(data map[string]*msg.CMsgSource1LegacyGam
 	player := geh.playerByUserID32(userID)
 	attacker := geh.playerByUserID32(data["attacker"].GetValShort())
 
-	wepType := common.MapEquipment(data["weapon"].GetValString())
-	wepType = geh.attackerWeaponType(wepType, userID)
+	rawWeapon := data["weapon"].GetValString()
+	wepType := common.MapEquipment(rawWeapon)
 
 	health := int(data["health"].GetValByte())
 	armor := int(data["armor"].GetValByte())
@@ -469,18 +471,41 @@ func (geh gameEventHandler) playerHurt(data map[string]*msg.CMsgSource1LegacyGam
 		}
 	}
 
-	geh.dispatch(events.PlayerHurt{
-		Player:            player,
-		Attacker:          attacker,
-		Health:            health,
-		Armor:             armor,
-		HealthDamage:      healthDamage,
-		ArmorDamage:       armorDamage,
-		HealthDamageTaken: healthDamageTaken,
-		ArmorDamageTaken:  armorDamageTaken,
-		HitGroup:          events.HitGroup(data["hitgroup"].GetValByte()),
-		Weapon:            geh.getEquipmentInstance(attacker, wepType),
-	})
+	dispatchPlayerHurt := func(wepType common.EquipmentType) {
+		geh.dispatch(events.PlayerHurt{
+			Player:            player,
+			Attacker:          attacker,
+			Health:            health,
+			Armor:             armor,
+			HealthDamage:      healthDamage,
+			ArmorDamage:       armorDamage,
+			HealthDamageTaken: healthDamageTaken,
+			ArmorDamageTaken:  armorDamageTaken,
+			HitGroup:          events.HitGroup(data["hitgroup"].GetValByte()),
+			Weapon:            geh.getEquipmentInstance(attacker, wepType),
+			WeaponString:      rawWeapon,
+		})
+	}
+
+	if rawWeapon == "" && wepType == common.EqUnknown {
+		geh.parser.delayedEventHandlers = append(geh.parser.delayedEventHandlers, func() {
+			resolvedType := geh.attackerWeaponType(wepType, userID)
+			if resolvedType == common.EqUnknown {
+				if geh.frameToBombExploded[geh.parser.currentFrame] {
+					resolvedType = common.EqBomb
+				} else {
+					resolvedType = common.EqWorld
+				}
+			}
+
+			dispatchPlayerHurt(resolvedType)
+		})
+
+		return
+	}
+
+	wepType = geh.attackerWeaponType(wepType, userID)
+	dispatchPlayerHurt(wepType)
 }
 
 func (geh gameEventHandler) playerFallDamage(data map[string]*msg.CMsgSource1LegacyGameEventKeyT) {
@@ -762,6 +787,7 @@ func (geh gameEventHandler) bombExploded(data map[string]*msg.CMsgSource1LegacyG
 		return
 	}
 
+	geh.frameToBombExploded[geh.parser.currentFrame] = true
 	geh.gameState().currentDefuser = nil
 	geh.dispatch(events.BombExplode{BombEvent: bombEvent})
 }
@@ -969,32 +995,41 @@ func (geh gameEventHandler) getThrownGrenade(p *common.Player, wepType common.Eq
 		return nil
 	}
 
-	playerGrenades := geh.gameState().thrownGrenades[p]
-	grenades := playerGrenades[wepType]
+	// Use an iterative approach with a visited set to prevent infinite loops
+	// caused by circular bot-controller relationships in demo data (see #620).
+	visited := make(map[*common.Player]bool)
+	current := p
 
-	if len(grenades) == 0 {
-		// Molotovs/incendiaries may be reported as the opposite type in game-events. (i.e. incendiary reported as molotov and vice versa)
-		switch wepType { //nolint:exhaustive
-		case common.EqIncendiary:
-			grenades = playerGrenades[common.EqMolotov]
-		case common.EqMolotov:
-			grenades = playerGrenades[common.EqIncendiary]
+	for current != nil && !visited[current] {
+		visited[current] = true
+
+		playerGrenades := geh.gameState().thrownGrenades[current]
+		grenades := playerGrenades[wepType]
+
+		if len(grenades) == 0 {
+			// Molotovs/incendiaries may be reported as the opposite type in game-events. (i.e. incendiary reported as molotov and vice versa)
+			switch wepType { //nolint:exhaustive
+			case common.EqIncendiary:
+				grenades = playerGrenades[common.EqMolotov]
+			case common.EqMolotov:
+				grenades = playerGrenades[common.EqIncendiary]
+			}
 		}
-	}
 
-	if len(grenades) == 0 {
+		if len(grenades) > 0 {
+			return grenades[len(grenades)-1]
+		}
+
 		// The player might be controlling a bot, in such case the thrown grenade is stored in the bot's state.
-		bot := p.ControlledBot()
-		if bot != nil && bot.SteamID64 != p.SteamID64 {
-			return geh.getThrownGrenade(bot, wepType)
+		bot := current.ControlledBot()
+		if bot == nil || bot.SteamID64 == current.SteamID64 {
+			break
 		}
+
+		current = bot
 	}
 
-	if len(grenades) == 0 {
-		return nil
-	}
-
-	return grenades[len(grenades)-1]
+	return nil
 }
 
 func (geh gameEventHandler) deleteThrownGrenade(p *common.Player, wepType common.EquipmentType) {
@@ -1026,18 +1061,12 @@ func (geh gameEventHandler) attackerWeaponType(wepType common.EquipmentType, vic
 		wepType = common.EqWorld
 	}
 
-	// if the round ended in the current frame with reason 1 or 0 we assume it was bomb damage
-	// unfortunately RoundEndReasonTargetBombed isn't enough and sometimes we need to check for 0 as well
 	if wepType == common.EqUnknown {
-		switch geh.frameToRoundEndReason[geh.parser.currentFrame] {
-		case 0:
-			fallthrough
-		case events.RoundEndReasonTargetBombed:
+		reason, ok := geh.frameToRoundEndReason[geh.parser.currentFrame]
+		if ok && reason == events.RoundEndReasonTargetBombed {
 			wepType = common.EqBomb
 		}
 	}
-
-	unassert.NotSame(wepType, common.EqUnknown)
 
 	return wepType
 }
